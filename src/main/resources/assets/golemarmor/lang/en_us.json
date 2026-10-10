@@ -1,0 +1,7 @@
+{
+  "golemarmor.configuration.title": "Iron Golem Armor Config",
+  "golemarmor.configuration.armor": "Armor",
+  "golemarmor.configuration.toughness": "Armor Toughness",
+  "golemarmor.configuration.bonusHealth": "Bonus Health",
+  "golemarmor.configuration.playerCreatedOnly": "Player-Created Golems Only"
+}
