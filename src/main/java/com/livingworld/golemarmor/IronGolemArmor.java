@@ -2,18 +2,24 @@ package com.livingworld.golemarmor;
 
 import net.minecraft.core.Holder;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.ai.attributes.Attribute;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.animal.IronGolem;
+import net.neoforged.bus.api.IEventBus;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.config.ModConfig;
+import net.neoforged.fml.event.config.ModConfigEvent;
 import net.neoforged.neoforge.common.ModConfigSpec;
 import net.neoforged.neoforge.event.entity.EntityJoinLevelEvent;
+import net.neoforged.neoforge.server.ServerLifecycleHooks;
 
 /**
  * Gives vanilla Iron Golems armor, armor toughness and optional bonus health.
@@ -22,8 +28,8 @@ import net.neoforged.neoforge.event.entity.EntityJoinLevelEvent;
  * EntityAttributeModificationEvent, because attribute base values are saved in each
  * entity's NBT: golems that already exist in a world would keep their old base values
  * and never pick up a changed default. A modifier with a fixed ID is applied
- * idempotently, so existing golems get patched the next time their chunk loads and
- * config changes propagate the same way.
+ * idempotently, so existing golems get patched the next time their chunk loads.
+ * Editing the config file while a world is running re-applies to every loaded golem.
  *
  * Single-file layout for convenience: split Config out if you prefer.
  */
@@ -31,8 +37,9 @@ import net.neoforged.neoforge.event.entity.EntityJoinLevelEvent;
 public class IronGolemArmor {
     public static final String MOD_ID = "golemarmor";
 
-    public IronGolemArmor(ModContainer container) {
+    public IronGolemArmor(IEventBus modBus, ModContainer container) {
         container.registerConfig(ModConfig.Type.COMMON, Config.SPEC);
+        modBus.addListener(Events::onConfigReload);
     }
 
     public static final class Config {
@@ -69,6 +76,25 @@ public class IronGolemArmor {
         public static void onJoin(EntityJoinLevelEvent event) {
             if (event.getLevel().isClientSide()) return;
             if (!(event.getEntity() instanceof IronGolem golem)) return;
+            update(golem);
+        }
+
+        /** Fired when the config file changes on disk, on FML's file-watcher thread. */
+        static void onConfigReload(ModConfigEvent.Reloading event) {
+            if (event.getConfig().getSpec() != Config.SPEC) return;
+            MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
+            if (server == null) return; // no world running; golems update when they load
+            // Entities may only be touched on the server thread.
+            server.execute(() -> {
+                for (ServerLevel level : server.getAllLevels()) {
+                    for (IronGolem golem : level.getEntities(EntityType.IRON_GOLEM, g -> true)) {
+                        update(golem);
+                    }
+                }
+            });
+        }
+
+        private static void update(IronGolem golem) {
             // Ineligible golems still go through apply() with 0 so that turning on
             // playerCreatedOnly strips buffs from village golems buffed earlier.
             boolean eligible = !Config.PLAYER_CREATED_ONLY.get() || golem.isPlayerCreated();
