@@ -55,8 +55,8 @@ public class IronGolemArmor {
                     .defineInRange("armor", 15.0, 0.0, 30.0);
             TOUGHNESS = b.comment("Armor toughness added. 8 = full diamond set, 12 = full netherite set.")
                     .defineInRange("toughness", 8.0, 0.0, 20.0);
-            BONUS_HEALTH = b.comment("Extra max health added to the vanilla 100. 0 = unchanged.")
-                    .defineInRange("bonusHealth", 0.0, 0.0, 1000.0);
+            BONUS_HEALTH = b.comment("Extra max health added to the vanilla 100. 0 = unchanged. Max 924 (vanilla caps max health at 1024).")
+                    .defineInRange("bonusHealth", 0.0, 0.0, 924.0);
             PLAYER_CREATED_ONLY = b.comment("If true, only player-built golems are buffed; village golems stay vanilla.")
                     .define("playerCreatedOnly", false);
             SPEC = b.build();
