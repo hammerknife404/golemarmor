@@ -28,14 +28,14 @@ The config file is `config/golemarmor-common.toml` and is created on first launc
 |---------------------|---------|------------|--------------------------------------------------------------------|
 | `armor`             | `15.0`  | 0 – 30     | Armor points added. 15 = full iron set.                            |
 | `toughness`         | `8.0`   | 0 – 20     | Armor toughness added. 8 = full diamond set, 12 = full netherite.  |
-| `bonusHealth`       | `0.0`   | 0 – 1000   | Extra max health added to the vanilla 100.                         |
+| `bonusHealth`       | `0.0`   | 0 – 924    | Extra max health added to the vanilla 100 (vanilla caps at 1024).  |
 | `playerCreatedOnly` | `false` | true/false | If true, only player-built golems are buffed.                      |
 
 Saving the file while the game is running applies changes right away to every loaded golem. Golems in unloaded chunks pick them up the next time they load. Turning `playerCreatedOnly` on also removes the buffs from golems that no longer qualify. When `bonusHealth` goes up, golems are healed by the amount it increased.
 
 ## Server notes
 
-Every iron golem is buffed by default, including golems that villagers summon, so iron farms are affected too. Armor reduces lava and fire damage, so golems in lava-based kill chambers take roughly twice as long to die with the default values, and more of them can be alive at once. Farms that kill with drowning, fall damage, cramming or burning are only slowed by `bonusHealth`, because those damage types ignore armor. Keep `bonusHealth` low on servers with many iron farms.
+Every iron golem is buffed by default, including golems that villagers summon, so iron farms are affected too. Armor reduces lava and fire damage, so golems in lava-based kill chambers take roughly twice as long to die with the default values, and more of them can be alive at once. Farms that kill with cramming or burning are only slowed by `bonusHealth`, because those damage types ignore armor. Keep `bonusHealth` low on servers with many iron farms.
 
 ## How it works
 
