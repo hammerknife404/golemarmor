@@ -7,6 +7,7 @@ A small NeoForge mod for Minecraft 1.21.1 that gives vanilla Iron Golems configu
 - Adds armor and armor toughness to every Iron Golem (defaults: 15 armor, like a full iron set, and 8 toughness, like a full diamond set).
 - Optional bonus max health on top of the vanilla 100.
 - Optional mode that only buffs player-built golems and leaves village golems vanilla.
+- Toggleable immunities: poison, lingering fire (golems stop burning once they step out of fire or lava), magma blocks and cactus.
 - Golems that already exist get updated when their chunk loads, so the mod works on existing worlds.
 - Config changes apply live: saving the config file while a world is running updates every loaded golem.
 - Runs on the server only. In multiplayer, players don't need the mod installed.
@@ -30,12 +31,18 @@ The config file is `config/golemarmor-common.toml` and is created on first launc
 | `toughness`         | `8.0`   | 0 – 20     | Armor toughness added. 8 = full diamond set, 12 = full netherite.  |
 | `bonusHealth`       | `0.0`   | 0 – 924    | Extra max health added to the vanilla 100 (vanilla caps at 1024).  |
 | `playerCreatedOnly` | `false` | true/false | If true, only player-built golems are buffed.                      |
+| `poisonImmunity`    | `true`  | true/false | Golems can't be poisoned.                                          |
+| `noLingeringFire`   | `true`  | true/false | Golems stop burning once out of fire/lava (still hurt while in it). |
+| `magmaImmunity`     | `true`  | true/false | No damage from standing on magma blocks.                           |
+| `cactusImmunity`    | `true`  | true/false | No damage from cactus.                                             |
 
-Saving the file while the game is running applies changes right away to every loaded golem. Golems in unloaded chunks pick them up the next time they load. Turning `playerCreatedOnly` on also removes the buffs from golems that no longer qualify. When `bonusHealth` goes up, golems are healed by the amount it increased.
+Saving the file while the game is running applies changes right away to every loaded golem. Golems in unloaded chunks pick them up the next time they load. Turning `playerCreatedOnly` on also removes the buffs from golems that no longer qualify. When `bonusHealth` goes up, golems are healed by the amount it increased. Turning `poisonImmunity` on also cures golems that are already poisoned. The immunities follow `playerCreatedOnly` like the other buffs.
 
 ## Server notes
 
 Every iron golem is buffed by default, including golems that villagers summon, so iron farms are affected too. Armor reduces lava and fire damage, so golems in lava-based kill chambers take roughly twice as long to die with the default values, and more of them can be alive at once. Farms that kill with cramming or burning are only slowed by `bonusHealth`, because those damage types ignore armor. Keep `bonusHealth` low on servers with many iron farms.
+
+`noLingeringFire` can break farms that dip golems into lava or fire briefly and let the afterburn kill them: the burn stops the moment they leave. Farms where golems stay in contact with lava (such as lava blades at head height) are unaffected. `magmaImmunity` breaks magma-floor kill chambers. Turn these off if your farm relies on them.
 
 ## How it works
 
