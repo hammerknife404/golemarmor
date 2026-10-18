@@ -7,7 +7,7 @@ A small NeoForge mod for Minecraft 1.21.1 that gives vanilla Iron Golems configu
 - Adds armor and armor toughness to every Iron Golem (defaults: 15 armor, like a full iron set, and 8 toughness, like a full diamond set).
 - Optional bonus max health on top of the vanilla 100.
 - Optional mode that only buffs player-built golems and leaves village golems vanilla.
-- Toggleable immunities: poison, lingering fire (golems stop burning once they step out of fire or lava), magma blocks and cactus.
+- Toggleable immunities: poison, lingering fire (golems stop burning once they step out of fire or lava), magma blocks, plants (cactus and sweet berry bushes) and freezing in powder snow. Golems already ignore drowning and fall damage in vanilla.
 - Golems that already exist get updated when their chunk loads, so the mod works on existing worlds.
 - Config changes apply live: saving the config file while a world is running updates every loaded golem.
 - Runs on the server only. In multiplayer, players don't need the mod installed.
@@ -34,7 +34,8 @@ The config file is `config/golemarmor-common.toml` and is created on first launc
 | `poisonImmunity`    | `true`  | true/false | Golems can't be poisoned.                                          |
 | `noLingeringFire`   | `true`  | true/false | Golems stop burning once out of fire/lava (still hurt while in it). |
 | `magmaImmunity`     | `true`  | true/false | No damage from standing on magma blocks.                           |
-| `cactusImmunity`    | `true`  | true/false | No damage from cactus.                                             |
+| `plantImmunity`     | `true`  | true/false | No damage from cactus or sweet berry bushes.                       |
+| `freezeImmunity`    | `true`  | true/false | Golems don't freeze in powder snow.                                |
 
 Saving the file while the game is running applies changes right away to every loaded golem. Golems in unloaded chunks pick them up the next time they load. Turning `playerCreatedOnly` on also removes the buffs from golems that no longer qualify. When `bonusHealth` goes up, golems are healed by the amount it increased. Turning `poisonImmunity` on also cures golems that are already poisoned. The immunities follow `playerCreatedOnly` like the other buffs.
 

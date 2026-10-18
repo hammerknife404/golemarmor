@@ -31,7 +31,7 @@ import net.neoforged.neoforge.server.ServerLifecycleHooks;
 
 /**
  * Gives vanilla Iron Golems armor, armor toughness and optional bonus health,
- * plus optional immunities to poison, lingering fire, magma blocks and cactus.
+ * plus optional immunities to poison, lingering fire, magma blocks, plants and freezing.
  *
  * Uses permanent attribute modifiers applied on EntityJoinLevelEvent instead of
  * EntityAttributeModificationEvent, because attribute base values are saved in each
@@ -60,7 +60,8 @@ public class IronGolemArmor {
         public static final ModConfigSpec.BooleanValue POISON_IMMUNITY;
         public static final ModConfigSpec.BooleanValue NO_LINGERING_FIRE;
         public static final ModConfigSpec.BooleanValue MAGMA_IMMUNITY;
-        public static final ModConfigSpec.BooleanValue CACTUS_IMMUNITY;
+        public static final ModConfigSpec.BooleanValue PLANT_IMMUNITY;
+        public static final ModConfigSpec.BooleanValue FREEZE_IMMUNITY;
 
         static {
             ModConfigSpec.Builder b = new ModConfigSpec.Builder();
@@ -79,8 +80,10 @@ public class IronGolemArmor {
                     .define("noLingeringFire", true);
             MAGMA_IMMUNITY = b.comment("If true, golems take no damage from standing on magma blocks.")
                     .define("magmaImmunity", true);
-            CACTUS_IMMUNITY = b.comment("If true, golems take no damage from cactus.")
-                    .define("cactusImmunity", true);
+            PLANT_IMMUNITY = b.comment("If true, golems take no damage from cactus or sweet berry bushes.")
+                    .define("plantImmunity", true);
+            FREEZE_IMMUNITY = b.comment("If true, golems don't freeze in powder snow.")
+                    .define("freezeImmunity", true);
             SPEC = b.build();
         }
     }
@@ -116,7 +119,9 @@ public class IronGolemArmor {
             if (!isEligible(golem)) return;
             DamageSource source = event.getSource();
             if ((Config.MAGMA_IMMUNITY.get() && source.is(DamageTypes.HOT_FLOOR))
-                    || (Config.CACTUS_IMMUNITY.get() && source.is(DamageTypes.CACTUS))) {
+                    || (Config.PLANT_IMMUNITY.get()
+                            && (source.is(DamageTypes.CACTUS) || source.is(DamageTypes.SWEET_BERRY_BUSH)))
+                    || (Config.FREEZE_IMMUNITY.get() && source.is(DamageTypes.FREEZE))) {
                 event.setCanceled(true);
             }
         }
@@ -125,8 +130,17 @@ public class IronGolemArmor {
         public static void onTick(EntityTickEvent.Post event) {
             if (!(event.getEntity() instanceof IronGolem golem)) return;
             // Cheap checks first: this runs for every entity every tick.
-            if (golem.getRemainingFireTicks() <= 0 || golem.level().isClientSide()) return;
-            if (!Config.NO_LINGERING_FIRE.get() || !isEligible(golem)) return;
+            if (golem.level().isClientSide()) return;
+            boolean burning = golem.getRemainingFireTicks() > 0;
+            boolean freezing = golem.getTicksFrozen() > 0;
+            if (!burning && !freezing) return;
+            if (!isEligible(golem)) return;
+
+            // Resetting every tick keeps the golem from ever reaching fully frozen,
+            // which also stops the shaking animation.
+            if (freezing && Config.FREEZE_IMMUNITY.get()) golem.setTicksFrozen(0);
+
+            if (!burning || !Config.NO_LINGERING_FIRE.get()) return;
             // Same "still in fire?" test vanilla uses in Entity.move before letting fire tick down.
             boolean inFire = golem.level()
                     .getBlockStatesIfLoaded(golem.getBoundingBox().deflate(1.0E-6))

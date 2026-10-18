@@ -7,5 +7,6 @@
   "golemarmor.configuration.poisonImmunity": "Poison Immunity",
   "golemarmor.configuration.noLingeringFire": "No Lingering Fire",
   "golemarmor.configuration.magmaImmunity": "Magma Block Immunity",
-  "golemarmor.configuration.cactusImmunity": "Cactus Immunity"
+  "golemarmor.configuration.plantImmunity": "Plant Immunity",
+  "golemarmor.configuration.freezeImmunity": "Freeze Immunity"
 }
