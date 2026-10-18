@@ -60,6 +60,10 @@ Requires JDK 21. If it isn't installed, Gradle downloads it automatically.
 ./gradlew runClient  # launch a dev client with the mod
 ```
 
+## Releasing
+
+Bump `mod_version` in `gradle.properties` and merge to `main`. CI builds the jar and publishes a GitHub release tagged `v<version>` with notes generated from the merged PRs. Pushes that don't change the version don't create a release.
+
 ## License
 
 MIT

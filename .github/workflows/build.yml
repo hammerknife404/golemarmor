@@ -30,3 +30,18 @@ jobs:
         run: gh release upload "${{ github.event.release.tag_name }}" build/libs/*.jar --clobber
         env:
           GH_TOKEN: ${{ github.token }}
+      # Publishes a release whenever mod_version on main has no matching tag yet.
+      # Done here rather than via the release trigger above, because releases
+      # created with GITHUB_TOKEN don't start new workflow runs.
+      - name: Release new version
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          version=$(grep '^mod_version=' gradle.properties | cut -d= -f2)
+          if gh release view "v$version" >/dev/null 2>&1; then
+            echo "v$version already released, skipping"
+            exit 0
+          fi
+          gh release create "v$version" "build/libs/golemarmor-$version.jar" \
+            --target "$GITHUB_SHA" --title "Iron Golem Armor $version" --generate-notes
+        env:
+          GH_TOKEN: ${{ github.token }}
