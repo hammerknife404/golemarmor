@@ -3,5 +3,10 @@
   "golemarmor.configuration.armor": "Armor",
   "golemarmor.configuration.toughness": "Armor Toughness",
   "golemarmor.configuration.bonusHealth": "Bonus Health",
-  "golemarmor.configuration.playerCreatedOnly": "Player-Created Golems Only"
+  "golemarmor.configuration.playerCreatedOnly": "Player-Created Golems Only",
+  "golemarmor.configuration.poisonImmunity": "Poison Immunity",
+  "golemarmor.configuration.noLingeringFire": "No Lingering Fire",
+  "golemarmor.configuration.magmaImmunity": "Magma Block Immunity",
+  "golemarmor.configuration.plantImmunity": "Plant Immunity",
+  "golemarmor.configuration.freezeImmunity": "Freeze Immunity"
 }
