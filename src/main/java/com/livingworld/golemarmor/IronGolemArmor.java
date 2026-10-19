@@ -5,6 +5,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.BlockTags;
+import net.minecraft.tags.DamageTypeTags;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.damagesource.DamageTypes;
 import net.minecraft.world.effect.MobEffects;
@@ -31,7 +32,7 @@ import net.neoforged.neoforge.server.ServerLifecycleHooks;
 
 /**
  * Gives vanilla Iron Golems armor, armor toughness and optional bonus health,
- * plus optional immunities to poison, lingering fire, magma blocks, plants and freezing.
+ * plus optional resistance to fire and immunities to poison, magma blocks, plants and freezing.
  *
  * Uses permanent attribute modifiers applied on EntityJoinLevelEvent instead of
  * EntityAttributeModificationEvent, because attribute base values are saved in each
@@ -58,7 +59,7 @@ public class IronGolemArmor {
         public static final ModConfigSpec.DoubleValue BONUS_HEALTH;
         public static final ModConfigSpec.BooleanValue PLAYER_CREATED_ONLY;
         public static final ModConfigSpec.BooleanValue POISON_IMMUNITY;
-        public static final ModConfigSpec.BooleanValue NO_LINGERING_FIRE;
+        public static final ModConfigSpec.EnumValue<FireResistance> FIRE_RESISTANCE;
         public static final ModConfigSpec.BooleanValue MAGMA_IMMUNITY;
         public static final ModConfigSpec.BooleanValue PLANT_IMMUNITY;
         public static final ModConfigSpec.BooleanValue FREEZE_IMMUNITY;
@@ -75,9 +76,12 @@ public class IronGolemArmor {
                     .define("playerCreatedOnly", false);
             POISON_IMMUNITY = b.comment("If true, golems can't be poisoned.")
                     .define("poisonImmunity", true);
-            NO_LINGERING_FIRE = b.comment("If true, golems stop burning as soon as they leave fire or lava.",
-                            "They still take damage while standing in it.")
-                    .define("noLingeringFire", true);
+            FIRE_RESISTANCE = b.comment("How well golems resist fire.",
+                            "OFF: vanilla.",
+                            "NO_AFTERBURN: golems stop burning as soon as they leave fire or lava, but still take damage while in it.",
+                            "FULL: like the Fire Resistance potion, no damage from fire, lava, burning, magma or fireballs.",
+                            "FULL stops lava-based iron farms from killing golems.")
+                    .defineEnum("fireResistance", FireResistance.NO_AFTERBURN);
             MAGMA_IMMUNITY = b.comment("If true, golems take no damage from standing on magma blocks.")
                     .define("magmaImmunity", true);
             PLANT_IMMUNITY = b.comment("If true, golems take no damage from cactus or sweet berry bushes.")
@@ -87,6 +91,8 @@ public class IronGolemArmor {
             SPEC = b.build();
         }
     }
+
+    public enum FireResistance { OFF, NO_AFTERBURN, FULL }
 
     @EventBusSubscriber(modid = MOD_ID)
     public static final class Events {
@@ -118,7 +124,9 @@ public class IronGolemArmor {
             if (!(event.getEntity() instanceof IronGolem golem)) return;
             if (!isEligible(golem)) return;
             DamageSource source = event.getSource();
-            if ((Config.MAGMA_IMMUNITY.get() && source.is(DamageTypes.HOT_FLOOR))
+            // IS_FIRE is the same tag the vanilla Fire Resistance effect checks.
+            if ((Config.FIRE_RESISTANCE.get() == FireResistance.FULL && source.is(DamageTypeTags.IS_FIRE))
+                    || (Config.MAGMA_IMMUNITY.get() && source.is(DamageTypes.HOT_FLOOR))
                     || (Config.PLANT_IMMUNITY.get()
                             && (source.is(DamageTypes.CACTUS) || source.is(DamageTypes.SWEET_BERRY_BUSH)))
                     || (Config.FREEZE_IMMUNITY.get() && source.is(DamageTypes.FREEZE))) {
@@ -140,7 +148,7 @@ public class IronGolemArmor {
             // which also stops the shaking animation.
             if (freezing && Config.FREEZE_IMMUNITY.get()) golem.setTicksFrozen(0);
 
-            if (!burning || !Config.NO_LINGERING_FIRE.get()) return;
+            if (!burning || Config.FIRE_RESISTANCE.get() == FireResistance.OFF) return;
             // Same "still in fire?" test vanilla uses in Entity.move before letting fire tick down.
             boolean inFire = golem.level()
                     .getBlockStatesIfLoaded(golem.getBoundingBox().deflate(1.0E-6))
