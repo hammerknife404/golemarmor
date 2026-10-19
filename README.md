@@ -1,6 +1,6 @@
 # Iron Golem Armor
 
-A small NeoForge mod for Minecraft 1.21.1 that gives vanilla Iron Golems configurable armor, armor toughness and bonus max health.
+A small NeoForge mod for Minecraft 1.21.1 that gives vanilla Iron Golems configurable armor, armor toughness, bonus max health and immunities to environmental hazards that shouldn't hurt a block of iron.
 
 ## Features
 
@@ -19,11 +19,14 @@ A small NeoForge mod for Minecraft 1.21.1 that gives vanilla Iron Golems configu
 
 ## Installation
 
-Put `golemarmor-<version>.jar` in your instance's `mods/` folder.
+Download `golemarmor-<version>.jar` from the [Releases](https://github.com/hammerknife404/golemarmor/releases) page and put it in the `mods/` folder:
+
+- **Singleplayer:** your client's `mods/` folder.
+- **Multiplayer:** the server's `mods/` folder. Players can join with or without the mod.
 
 ## Configuration
 
-The config file is `config/golemarmor-common.toml` and is created on first launch.
+The config file is `config/golemarmor-common.toml` and is created on first launch. In singleplayer you can also edit it in game from **Mods → Iron Golem Armor → Config**.
 
 | Option              | Default | Range      | Description                                                        |
 |---------------------|---------|------------|--------------------------------------------------------------------|
@@ -39,17 +42,23 @@ The config file is `config/golemarmor-common.toml` and is created on first launc
 
 Saving the file while the game is running applies changes right away to every loaded golem. Golems in unloaded chunks pick them up the next time they load. Turning `playerCreatedOnly` on also removes the buffs from golems that no longer qualify. When `bonusHealth` goes up, golems are healed by the amount it increased. Turning `poisonImmunity` on also cures golems that are already poisoned. The immunities follow `playerCreatedOnly` like the other buffs.
 
+On a dedicated server, edit the server's copy of the file. The in-game config screen only changes your own local copy, which has no effect on a server you join.
+
 ## Server notes
 
-Every iron golem is buffed by default, including golems that villagers summon, so iron farms are affected too. Armor reduces lava and fire damage, so golems in lava-based kill chambers take roughly twice as long to die with the default values, and more of them can be alive at once. Farms that kill with cramming or burning are only slowed by `bonusHealth`, because those damage types ignore armor. Keep `bonusHealth` low on servers with many iron farms.
+Every iron golem is buffed by default, including golems that villagers summon, so iron farms are affected too. Armor reduces lava and fire damage, so golems in lava-based kill chambers take roughly twice as long to die with the default values, and more of them can be alive at once. Farms that kill with cramming are only slowed by `bonusHealth`, because cramming ignores armor. Keep `bonusHealth` low on servers with many iron farms.
 
 `noLingeringFire` can break farms that dip golems into lava or fire briefly and let the afterburn kill them: the burn stops the moment they leave. Farms where golems stay in contact with lava (such as lava blades at head height) are unaffected. `magmaImmunity` breaks magma-floor kill chambers. Turn these off if your farm relies on them.
 
 ## How it works
 
-When an Iron Golem joins the world, the mod adds permanent attribute modifiers with fixed IDs. Because the IDs are fixed, applying them again does nothing, and a changed config value replaces the old modifier. It doesn't change the golem's base attribute values. Base values are saved with each entity, so changing them would not reach golems that already exist.
+**Armor, toughness and health:** when an Iron Golem joins the world, the mod adds permanent attribute modifiers with fixed IDs. Because the IDs are fixed, applying them again does nothing, and a changed config value replaces the old modifier. It doesn't change the golem's base attribute values. Base values are saved with each entity, so changing them would not reach golems that already exist.
 
-To remove the mod's effects, set every value to `0` (or `playerCreatedOnly` to `true` for village golems) and load the affected areas once before you uninstall. Modifiers left on golems after uninstalling will keep applying.
+**Immunities:** these are checked live, whenever a golem would take damage, get poisoned, keep burning or freeze. Nothing is saved on the golem.
+
+## Uninstalling
+
+The immunities stop as soon as the mod is removed. The armor, toughness and health modifiers are saved on each golem, though, and will keep applying after you uninstall. To remove them first, set `armor`, `toughness` and `bonusHealth` to `0` (or `playerCreatedOnly` to `true` for village golems only) and load the affected areas once before uninstalling.
 
 ## Building
 
@@ -66,4 +75,4 @@ Bump `mod_version` in `gradle.properties` and merge to `main`. CI builds the jar
 
 ## License
 
-MIT
+[MIT](LICENSE)
