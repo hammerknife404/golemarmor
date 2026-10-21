@@ -8,5 +8,7 @@
   "golemarmor.configuration.fireResistance": "Fire Resistance",
   "golemarmor.configuration.magmaImmunity": "Magma Block Immunity",
   "golemarmor.configuration.plantImmunity": "Plant Immunity",
-  "golemarmor.configuration.freezeImmunity": "Freeze Immunity"
+  "golemarmor.configuration.freezeImmunity": "Freeze Immunity",
+  "golemarmor.configuration.attackCreepers": "Attack Creepers",
+  "golemarmor.configuration.creeperVillagerRadius": "Creeper Villager Safety Radius"
 }

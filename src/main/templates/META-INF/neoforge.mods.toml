@@ -13,7 +13,8 @@ displayURL="https://github.com/hammerknife404/golemarmor"
 displayTest="IGNORE_SERVER_VERSION"
 description='''
 Gives vanilla Iron Golems configurable armor, armor toughness and bonus health,
-plus adjustable fire resistance and immunities to poison, magma blocks, plants and freezing.
+plus adjustable fire resistance, immunities to poison, magma blocks, plants and freezing,
+and optional creeper hunting that keeps clear of villagers.
 Existing golems are updated when their chunk loads.
 '''
 

@@ -6,6 +6,7 @@ A small NeoForge mod for Minecraft 1.21.1 that gives vanilla Iron Golems configu
 
 - Armor, armor toughness and optional bonus health for every Iron Golem, or only player-built ones.
 - Adjustable fire resistance and toggleable immunities to poison, magma blocks, plants and powder snow. Golems already ignore drowning and fall damage in vanilla.
+- Optional creeper hunting that holds off while villagers are close enough to be caught in the blast.
 - Works on existing worlds, and config changes apply live.
 - Server-side only: players can join with or without the mod.
 
@@ -33,6 +34,8 @@ The config file is `config/golemarmor-common.toml` and is created on first launc
 | `magmaImmunity`     | `true`  | true/false | No damage from standing on magma blocks.                            |
 | `plantImmunity`     | `true`  | true/false | No damage from cactus or sweet berry bushes.                        |
 | `freezeImmunity`    | `true`  | true/false | Golems don't freeze in powder snow.                                 |
+| `attackCreepers`    | `false` | true/false | Golems attack creepers, which vanilla golems ignore.                |
+| `creeperVillagerRadius` | `8.0` | 0 – 32   | Leave a creeper alone while a villager or wandering trader is this close to it; back off if one comes into range mid-fight. Doubled for charged creepers. `0` = always attack. |
 
 Saving the file while the game is running updates every loaded golem right away; golems in unloaded chunks update when they next load. Turning `playerCreatedOnly` on also strips buffs and immunities from golems that no longer qualify. Raising `bonusHealth` heals golems by the increase, and turning `poisonImmunity` on cures poisoned golems.
 
