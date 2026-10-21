@@ -10,11 +10,16 @@ import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.damagesource.DamageTypes;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.ai.goal.target.NearestAttackableTargetGoal;
+import net.minecraft.world.entity.ai.targeting.TargetingConditions;
 import net.minecraft.world.entity.ai.attributes.Attribute;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.animal.IronGolem;
+import net.minecraft.world.entity.monster.Creeper;
+import net.minecraft.world.entity.npc.AbstractVillager;
 import net.minecraft.world.level.block.Blocks;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -32,7 +37,8 @@ import net.neoforged.neoforge.server.ServerLifecycleHooks;
 
 /**
  * Gives vanilla Iron Golems armor, armor toughness and optional bonus health,
- * plus optional resistance to fire and immunities to poison, magma blocks, plants and freezing.
+ * plus optional resistance to fire and immunities to poison, magma blocks, plants and freezing,
+ * and can make them attack creepers.
  *
  * Uses permanent attribute modifiers applied on EntityJoinLevelEvent instead of
  * EntityAttributeModificationEvent, because attribute base values are saved in each
@@ -63,6 +69,8 @@ public class IronGolemArmor {
         public static final ModConfigSpec.BooleanValue MAGMA_IMMUNITY;
         public static final ModConfigSpec.BooleanValue PLANT_IMMUNITY;
         public static final ModConfigSpec.BooleanValue FREEZE_IMMUNITY;
+        public static final ModConfigSpec.BooleanValue ATTACK_CREEPERS;
+        public static final ModConfigSpec.DoubleValue CREEPER_VILLAGER_RADIUS;
 
         static {
             ModConfigSpec.Builder b = new ModConfigSpec.Builder();
@@ -88,6 +96,12 @@ public class IronGolemArmor {
                     .define("plantImmunity", true);
             FREEZE_IMMUNITY = b.comment("If true, golems don't freeze in powder snow.")
                     .define("freezeImmunity", true);
+            ATTACK_CREEPERS = b.comment("If true, golems attack creepers. Vanilla golems ignore them.")
+                    .define("attackCreepers", false);
+            CREEPER_VILLAGER_RADIUS = b.comment("Golems leave a creeper alone while a villager or wandering trader is within this many blocks of it,",
+                            "and back off if one walks into range mid-fight. Doubled for charged creepers. 0 = always attack.",
+                            "A creeper explosion hurts out to 6 blocks, 12 when charged.")
+                    .defineInRange("creeperVillagerRadius", 8.0, 0.0, 32.0);
             SPEC = b.build();
         }
     }
@@ -108,6 +122,12 @@ public class IronGolemArmor {
             if (event.getLevel().isClientSide()) return;
             if (!(event.getEntity() instanceof IronGolem golem)) return;
             update(golem);
+            // Goals aren't saved, so every golem instance needs one. Always added; it checks the config itself.
+            if (golem.targetSelector.getAvailableGoals().stream()
+                    .noneMatch(w -> w.getGoal() instanceof CreeperTargetGoal)) {
+                // Same priority as the vanilla golem's monster-targeting goal.
+                golem.targetSelector.addGoal(3, new CreeperTargetGoal(golem));
+            }
         }
 
         @SubscribeEvent
@@ -190,6 +210,16 @@ public class IronGolemArmor {
             if (eligible && Config.POISON_IMMUNITY.get()) golem.removeEffect(MobEffects.POISON);
         }
 
+        private static boolean canTargetCreeper(IronGolem golem, Creeper creeper) {
+            if (!Config.ATTACK_CREEPERS.get() || !isEligible(golem)) return false;
+            double radius = Config.CREEPER_VILLAGER_RADIUS.get();
+            if (radius <= 0.0) return true;
+            if (creeper.isPowered()) radius *= 2.0;
+            return creeper.level()
+                    .getEntitiesOfClass(AbstractVillager.class, creeper.getBoundingBox().inflate(radius))
+                    .isEmpty();
+        }
+
         private static boolean isEligible(IronGolem golem) {
             return !Config.PLAYER_CREATED_ONLY.get() || golem.isPlayerCreated();
         }
@@ -209,6 +239,32 @@ public class IronGolemArmor {
                         new AttributeModifier(id, amount, AttributeModifier.Operation.ADD_VALUE));
             }
             return amount - old;
+        }
+    }
+
+    /**
+     * Vanilla golems never target creepers: their monster goal filters them out, and
+     * IronGolem.canAttackType rejects them, which fails any combat TargetingConditions.
+     * Non-combat conditions skip that type check; the golem's melee goal attacks whatever it targets.
+     */
+    static final class CreeperTargetGoal extends NearestAttackableTargetGoal<Creeper> {
+        private final IronGolem golem;
+
+        CreeperTargetGoal(IronGolem golem) {
+            super(golem, Creeper.class, 5, false, false, null);
+            this.golem = golem;
+            // Replaces the combat conditions super just built.
+            this.targetConditions = TargetingConditions.forNonCombat()
+                    .range(this.getFollowDistance())
+                    .selector(target -> Events.canTargetCreeper(golem, (Creeper) target));
+        }
+
+        @Override
+        public boolean canContinueToUse() {
+            // Re-check so the golem backs off when a villager wanders close or the option is turned off.
+            LivingEntity target = golem.getTarget();
+            if (target instanceof Creeper creeper && !Events.canTargetCreeper(golem, creeper)) return false;
+            return super.canContinueToUse();
         }
     }
 }
