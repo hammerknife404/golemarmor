@@ -356,7 +356,7 @@ public class IronGolemArmor {
         }
 
         /** Idempotent. Returns the change in modifier amount (new - old, 0 if unchanged). */
-        private static double apply(IronGolem golem, Holder<Attribute> attr, ResourceLocation id, double amount) {
+        private static double apply(LivingEntity golem, Holder<Attribute> attr, ResourceLocation id, double amount) {
             AttributeInstance inst = golem.getAttribute(attr);
             if (inst == null) return 0.0;
 
