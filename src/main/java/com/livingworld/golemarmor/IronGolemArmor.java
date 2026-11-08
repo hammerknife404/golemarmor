@@ -8,6 +8,7 @@ import net.minecraft.tags.BlockTags;
 import net.minecraft.tags.DamageTypeTags;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.damagesource.DamageTypes;
+import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
@@ -18,9 +19,15 @@ import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.animal.IronGolem;
+import net.minecraft.world.entity.animal.SnowGolem;
 import net.minecraft.world.entity.monster.Creeper;
 import net.minecraft.world.entity.npc.AbstractVillager;
+import net.minecraft.world.entity.projectile.Snowball;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.phys.EntityHitResult;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.ModContainer;
@@ -30,15 +37,19 @@ import net.neoforged.fml.config.ModConfig;
 import net.neoforged.fml.event.config.ModConfigEvent;
 import net.neoforged.neoforge.common.ModConfigSpec;
 import net.neoforged.neoforge.event.entity.EntityJoinLevelEvent;
+import net.neoforged.neoforge.event.entity.ProjectileImpactEvent;
 import net.neoforged.neoforge.event.entity.living.LivingIncomingDamageEvent;
 import net.neoforged.neoforge.event.entity.living.MobEffectEvent;
 import net.neoforged.neoforge.event.tick.EntityTickEvent;
+import net.neoforged.neoforge.registries.DeferredItem;
+import net.neoforged.neoforge.registries.DeferredRegister;
 import net.neoforged.neoforge.server.ServerLifecycleHooks;
 
 /**
  * Gives vanilla Iron Golems armor, armor toughness and optional bonus health,
  * plus optional resistance to fire and immunities to poison, magma blocks, plants and freezing,
- * and can make them attack creepers.
+ * and can make them attack creepers. Snow Golems get their own armor, immunities and
+ * a chance to throw poisoning or rock-filled snowballs.
  *
  * Uses permanent attribute modifiers applied on EntityJoinLevelEvent instead of
  * EntityAttributeModificationEvent, because attribute base values are saved in each
@@ -53,8 +64,14 @@ import net.neoforged.neoforge.server.ServerLifecycleHooks;
 public class IronGolemArmor {
     public static final String MOD_ID = "golemarmor";
 
+    public static final DeferredRegister.Items ITEMS = DeferredRegister.createItems(MOD_ID);
+    /** Snowballs thrown by snow golems. Rendered with their own item model, so they look yellow or rocky in flight. */
+    public static final DeferredItem<Item> YELLOW_SNOWBALL = ITEMS.registerSimpleItem("yellow_snowball");
+    public static final DeferredItem<Item> ROCK_SNOWBALL = ITEMS.registerSimpleItem("rock_snowball");
+
     public IronGolemArmor(IEventBus modBus, ModContainer container) {
         container.registerConfig(ModConfig.Type.COMMON, Config.SPEC);
+        ITEMS.register(modBus);
         modBus.addListener(Events::onConfigReload);
     }
 
@@ -71,6 +88,15 @@ public class IronGolemArmor {
         public static final ModConfigSpec.BooleanValue FREEZE_IMMUNITY;
         public static final ModConfigSpec.BooleanValue ATTACK_CREEPERS;
         public static final ModConfigSpec.DoubleValue CREEPER_VILLAGER_RADIUS;
+        public static final ModConfigSpec.DoubleValue SNOW_ARMOR;
+        public static final ModConfigSpec.DoubleValue SNOW_TOUGHNESS;
+        public static final ModConfigSpec.BooleanValue SNOW_WATER_IMMUNITY;
+        public static final ModConfigSpec.EnumValue<FireResistance> SNOW_FIRE_RESISTANCE;
+        public static final ModConfigSpec.BooleanValue SNOW_MAGMA_IMMUNITY;
+        public static final ModConfigSpec.BooleanValue SNOW_PLANT_IMMUNITY;
+        public static final ModConfigSpec.BooleanValue SNOW_POISON_IMMUNITY;
+        public static final ModConfigSpec.DoubleValue YELLOW_SNOWBALL_CHANCE;
+        public static final ModConfigSpec.DoubleValue ROCK_SNOWBALL_CHANCE;
 
         static {
             ModConfigSpec.Builder b = new ModConfigSpec.Builder();
@@ -102,6 +128,26 @@ public class IronGolemArmor {
                             "and back off if one walks into range mid-fight. Doubled for charged creepers. 0 = always attack.",
                             "A creeper explosion hurts out to 6 blocks, 12 when charged.")
                     .defineInRange("creeperVillagerRadius", 8.0, 0.0, 32.0);
+            SNOW_ARMOR = b.comment("Armor points added to snow golems. 0 = vanilla.")
+                    .defineInRange("snowArmor", 1.0, 0.0, 30.0);
+            SNOW_TOUGHNESS = b.comment("Armor toughness added to snow golems.")
+                    .defineInRange("snowToughness", 0.0, 0.0, 20.0);
+            SNOW_WATER_IMMUNITY = b.comment("If true, snow golems take no damage from rain or water.")
+                    .define("snowWaterImmunity", true);
+            SNOW_FIRE_RESISTANCE = b.comment("How well snow golems resist fire. Same modes as fireResistance.")
+                    .defineEnum("snowFireResistance", FireResistance.NO_AFTERBURN);
+            SNOW_MAGMA_IMMUNITY = b.comment("If true, snow golems take no damage from standing on magma blocks.")
+                    .define("snowMagmaImmunity", true);
+            SNOW_PLANT_IMMUNITY = b.comment("If true, snow golems take no damage from cactus or sweet berry bushes.")
+                    .define("snowPlantImmunity", true);
+            SNOW_POISON_IMMUNITY = b.comment("If true, snow golems can't be poisoned.")
+                    .define("snowPoisonImmunity", true);
+            YELLOW_SNOWBALL_CHANCE = b.comment("Chance per throw that a snow golem throws a yellow snowball,",
+                            "which poisons the target for 5 seconds. 0 = never.")
+                    .defineInRange("yellowSnowballChance", 0.1, 0.0, 1.0);
+            ROCK_SNOWBALL_CHANCE = b.comment("Chance per throw that a snow golem throws a rock-filled snowball, which deals 1 damage. 0 = never.",
+                            "Yellow is rolled first, so if the two chances add up to more than 1, rock only gets the leftover share.")
+                    .defineInRange("rockSnowballChance", 0.1, 0.0, 1.0);
             SPEC = b.build();
         }
     }
@@ -116,6 +162,12 @@ public class IronGolemArmor {
                 ResourceLocation.fromNamespaceAndPath(MOD_ID, "golem_toughness");
         private static final ResourceLocation HEALTH_ID =
                 ResourceLocation.fromNamespaceAndPath(MOD_ID, "golem_health");
+        private static final ResourceLocation SNOW_ARMOR_ID =
+                ResourceLocation.fromNamespaceAndPath(MOD_ID, "snow_golem_armor");
+        private static final ResourceLocation SNOW_TOUGHNESS_ID =
+                ResourceLocation.fromNamespaceAndPath(MOD_ID, "snow_golem_toughness");
+        /** Poison from a yellow snowball. */
+        private static final int YELLOW_POISON_TICKS = 5 * 20;
 
         @SubscribeEvent
         public static void onJoin(EntityJoinLevelEvent event) {
@@ -131,12 +183,77 @@ public class IronGolemArmor {
         }
 
         @SubscribeEvent
+        public static void onSnowGolemJoin(EntityJoinLevelEvent event) {
+            if (event.getLevel().isClientSide()) return;
+            if (event.getEntity() instanceof SnowGolem golem) updateSnowGolem(golem);
+        }
+
+        /** Snowballs thrown by snow golems get a variant here; the item they carry decides what they do on impact. */
+        @SubscribeEvent
+        public static void onSnowballJoin(EntityJoinLevelEvent event) {
+            if (event.getLevel().isClientSide()) return;
+            if (!(event.getEntity() instanceof Snowball ball) || !(ball.getOwner() instanceof SnowGolem)) return;
+            // Saved projectiles rejoin when their chunk loads with their item intact; don't reroll them.
+            if (!ball.getItem().is(Items.SNOWBALL)) return;
+
+            float roll = ball.getRandom().nextFloat();
+            double yellowChance = Config.YELLOW_SNOWBALL_CHANCE.get();
+            if (roll < yellowChance) {
+                ball.setItem(new ItemStack(YELLOW_SNOWBALL.get()));
+            } else if (roll < yellowChance + Config.ROCK_SNOWBALL_CHANCE.get()) {
+                ball.setItem(new ItemStack(ROCK_SNOWBALL.get()));
+            }
+        }
+
+        @SubscribeEvent
+        public static void onSnowballImpact(ProjectileImpactEvent event) {
+            if (!(event.getProjectile() instanceof Snowball ball)) return;
+            if (!(event.getRayTraceResult() instanceof EntityHitResult hit)) return;
+            if (!(hit.getEntity() instanceof LivingEntity target)) return;
+
+            ItemStack stack = ball.getItem();
+            if (stack.is(ROCK_SNOWBALL.get())) {
+                target.hurt(ball.damageSources().thrown(ball, ball.getOwner()), 1.0F);
+            } else if (stack.is(YELLOW_SNOWBALL.get())) {
+                target.addEffect(new MobEffectInstance(MobEffects.POISON, YELLOW_POISON_TICKS));
+            }
+        }
+
+        @SubscribeEvent
         public static void onEffectApplicable(MobEffectEvent.Applicable event) {
+            if (event.getEntity() instanceof SnowGolem) {
+                if (Config.SNOW_POISON_IMMUNITY.get() && event.getEffectInstance().is(MobEffects.POISON)) {
+                    event.setResult(MobEffectEvent.Applicable.Result.DO_NOT_APPLY);
+                }
+                return;
+            }
             if (!(event.getEntity() instanceof IronGolem golem)) return;
             if (Config.POISON_IMMUNITY.get() && isEligible(golem)
                     && event.getEffectInstance().is(MobEffects.POISON)) {
                 event.setResult(MobEffectEvent.Applicable.Result.DO_NOT_APPLY);
             }
+        }
+
+        @SubscribeEvent
+        public static void onSnowGolemIncomingDamage(LivingIncomingDamageEvent event) {
+            if (!(event.getEntity() instanceof SnowGolem golem)) return;
+            DamageSource source = event.getSource();
+            // Water damage has no attacker, so a source-less hit while wet is the environmental one.
+            if ((Config.SNOW_FIRE_RESISTANCE.get() == FireResistance.FULL && source.is(DamageTypeTags.IS_FIRE))
+                    || (Config.SNOW_MAGMA_IMMUNITY.get() && source.is(DamageTypes.HOT_FLOOR))
+                    || (Config.SNOW_PLANT_IMMUNITY.get()
+                            && (source.is(DamageTypes.CACTUS) || source.is(DamageTypes.SWEET_BERRY_BUSH)))
+                    || (Config.SNOW_WATER_IMMUNITY.get() && source.getEntity() == null && golem.isInWaterOrRain())) {
+                event.setCanceled(true);
+            }
+        }
+
+        @SubscribeEvent
+        public static void onSnowGolemTick(EntityTickEvent.Post event) {
+            if (!(event.getEntity() instanceof SnowGolem golem)) return;
+            if (golem.level().isClientSide()) return;
+            if (golem.getRemainingFireTicks() <= 0 || Config.SNOW_FIRE_RESISTANCE.get() == FireResistance.OFF) return;
+            clearAfterburnOutsideFire(golem);
         }
 
         @SubscribeEvent
@@ -169,11 +286,16 @@ public class IronGolemArmor {
             if (freezing && Config.FREEZE_IMMUNITY.get()) golem.setTicksFrozen(0);
 
             if (!burning || Config.FIRE_RESISTANCE.get() == FireResistance.OFF) return;
+            clearAfterburnOutsideFire(golem);
+        }
+
+        /** Puts out burning once the entity is no longer standing in fire or lava. */
+        private static void clearAfterburnOutsideFire(LivingEntity entity) {
             // Same "still in fire?" test vanilla uses in Entity.move before letting fire tick down.
-            boolean inFire = golem.level()
-                    .getBlockStatesIfLoaded(golem.getBoundingBox().deflate(1.0E-6))
+            boolean inFire = entity.level()
+                    .getBlockStatesIfLoaded(entity.getBoundingBox().deflate(1.0E-6))
                     .anyMatch(state -> state.is(BlockTags.FIRE) || state.is(Blocks.LAVA));
-            if (!inFire) golem.clearFire();
+            if (!inFire) entity.clearFire();
         }
 
         /** Fired when the config file changes on disk, on FML's file-watcher thread. */
@@ -186,6 +308,9 @@ public class IronGolemArmor {
                 for (ServerLevel level : server.getAllLevels()) {
                     for (IronGolem golem : level.getEntities(EntityType.IRON_GOLEM, g -> true)) {
                         update(golem);
+                    }
+                    for (SnowGolem golem : level.getEntities(EntityType.SNOW_GOLEM, g -> true)) {
+                        updateSnowGolem(golem);
                     }
                 }
             });
@@ -208,6 +333,12 @@ public class IronGolemArmor {
 
             // Cure golems already poisoned when poisonImmunity was off.
             if (eligible && Config.POISON_IMMUNITY.get()) golem.removeEffect(MobEffects.POISON);
+        }
+
+        private static void updateSnowGolem(SnowGolem golem) {
+            apply(golem, Attributes.ARMOR, SNOW_ARMOR_ID, Config.SNOW_ARMOR.get());
+            apply(golem, Attributes.ARMOR_TOUGHNESS, SNOW_TOUGHNESS_ID, Config.SNOW_TOUGHNESS.get());
+            if (Config.SNOW_POISON_IMMUNITY.get()) golem.removeEffect(MobEffects.POISON);
         }
 
         private static boolean canTargetCreeper(IronGolem golem, Creeper creeper) {

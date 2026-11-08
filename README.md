@@ -1,12 +1,13 @@
 # Iron Golem Armor
 
-A small NeoForge mod for Minecraft 1.21.1 that gives vanilla Iron Golems configurable armor, armor toughness, bonus max health and immunities to environmental hazards that shouldn't hurt a block of iron.
+A small NeoForge mod for Minecraft 1.21.1 that gives vanilla Iron Golems configurable armor, armor toughness, bonus max health and immunities to environmental hazards that shouldn't hurt a block of iron. Snow Golems get armor, immunities and special snowballs too.
 
 ## Features
 
 - Armor, armor toughness and optional bonus health for every Iron Golem, or only player-built ones.
 - Adjustable fire resistance and toggleable immunities to poison, magma blocks, plants and powder snow. Golems already ignore drowning and fall damage in vanilla.
 - Optional creeper hunting that holds off while villagers are close enough to be caught in the blast.
+- Snow Golems get armor and their own immunities, including to rain and water, and can throw poisoning or rock-filled snowballs.
 - Works on existing worlds, and config changes apply live.
 - Server-side only: players can join with or without the mod.
 
@@ -36,10 +37,25 @@ The config file is `config/golemarmor-common.toml` and is created on first launc
 | `freezeImmunity`    | `true`  | true/false | Golems don't freeze in powder snow.                                 |
 | `attackCreepers`    | `false` | true/false | Golems attack creepers, which vanilla golems ignore.                |
 | `creeperVillagerRadius` | `8.0` | 0 – 32   | Leave a creeper alone while a villager or wandering trader is this close to it; back off if one comes into range mid-fight. Doubled for charged creepers. `0` = always attack. |
+| `snowArmor`         | `1.0`   | 0 – 30     | Armor points added to snow golems. `0` = vanilla.                   |
+| `snowToughness`     | `0.0`   | 0 – 20     | Armor toughness added to snow golems.                               |
+| `snowWaterImmunity` | `true`  | true/false | Snow golems take no damage from rain or water.                      |
+| `snowFireResistance` | `NO_AFTERBURN` | `OFF` / `NO_AFTERBURN` / `FULL` | Same modes as `fireResistance`, for snow golems only. |
+| `snowMagmaImmunity` | `true`  | true/false | Snow golems take no damage from standing on magma blocks.           |
+| `snowPlantImmunity` | `true`  | true/false | Snow golems take no damage from cactus or sweet berry bushes.       |
+| `snowPoisonImmunity` | `true` | true/false | Snow golems can't be poisoned.                                      |
+| `yellowSnowballChance` | `0.1` | 0 – 1   | Chance per throw of a yellow snowball, which poisons the target for 5 seconds. |
+| `rockSnowballChance` | `0.1` | 0 – 1     | Chance per throw of a rock-filled snowball, which deals 1 damage. Yellow is rolled first, so rock only gets the leftover share if the two add up to more than 1. |
 
 Saving the file while the game is running updates every loaded golem right away; golems in unloaded chunks update when they next load. Turning `playerCreatedOnly` on also strips buffs and immunities from golems that no longer qualify. Raising `bonusHealth` heals golems by the increase, and turning `poisonImmunity` on cures poisoned golems.
 
 Upgrading from 1.4.0 or older: `noLingeringFire` was replaced by `fireResistance`. The old key is dropped and the new one starts at `NO_AFTERBURN`, so if you had set `noLingeringFire = false`, set `fireResistance = "OFF"`.
+
+## Snow golems
+
+Snow golems are buffed the same way as iron golems, with their own options above. Their snowballs are rolled when thrown: `yellowSnowballChance` gives poison, `rockSnowballChance` gives 1 damage, and the rest are plain snowballs. Each variant has its own item model, so you can tell them apart in flight.
+
+Snow golems are always player-built, so there is no player-created-only option for them.
 
 ## Iron farms
 

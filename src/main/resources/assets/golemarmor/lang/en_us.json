@@ -10,5 +10,16 @@
   "golemarmor.configuration.plantImmunity": "Plant Immunity",
   "golemarmor.configuration.freezeImmunity": "Freeze Immunity",
   "golemarmor.configuration.attackCreepers": "Attack Creepers",
-  "golemarmor.configuration.creeperVillagerRadius": "Creeper Villager Safety Radius"
+  "golemarmor.configuration.creeperVillagerRadius": "Creeper Villager Safety Radius",
+  "golemarmor.configuration.snowArmor": "Snow Golem Armor",
+  "golemarmor.configuration.snowToughness": "Snow Golem Armor Toughness",
+  "golemarmor.configuration.snowWaterImmunity": "Snow Golem Water Immunity",
+  "golemarmor.configuration.snowFireResistance": "Snow Golem Fire Resistance",
+  "golemarmor.configuration.snowMagmaImmunity": "Snow Golem Magma Block Immunity",
+  "golemarmor.configuration.snowPlantImmunity": "Snow Golem Plant Immunity",
+  "golemarmor.configuration.snowPoisonImmunity": "Snow Golem Poison Immunity",
+  "golemarmor.configuration.yellowSnowballChance": "Yellow Snowball Chance",
+  "golemarmor.configuration.rockSnowballChance": "Rock Snowball Chance",
+  "item.golemarmor.yellow_snowball": "Yellow Snowball",
+  "item.golemarmor.rock_snowball": "Rock Snowball"
 }
