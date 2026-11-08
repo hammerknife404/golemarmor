@@ -20,6 +20,7 @@ import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.animal.IronGolem;
 import net.minecraft.world.entity.animal.SnowGolem;
+import net.minecraft.world.entity.monster.Blaze;
 import net.minecraft.world.entity.monster.Creeper;
 import net.minecraft.world.entity.npc.AbstractVillager;
 import net.minecraft.world.entity.projectile.Snowball;
@@ -213,7 +214,10 @@ public class IronGolemArmor {
 
             ItemStack stack = ball.getItem();
             if (stack.is(ROCK_SNOWBALL.get())) {
-                target.hurt(ball.damageSources().thrown(ball, ball.getOwner()), 1.0F);
+                // Vanilla's own hit lands after this one and does 3 to blazes, which i-frames would cap
+                // at this hit's damage. Deal vanilla's 3 plus the rock's 1 up front instead.
+                float damage = target instanceof Blaze ? 4.0F : 1.0F;
+                target.hurt(ball.damageSources().thrown(ball, ball.getOwner()), damage);
             } else if (stack.is(YELLOW_SNOWBALL.get())) {
                 target.addEffect(new MobEffectInstance(MobEffects.POISON, YELLOW_POISON_TICKS));
             }
@@ -236,14 +240,14 @@ public class IronGolemArmor {
 
         @SubscribeEvent
         public static void onSnowGolemIncomingDamage(LivingIncomingDamageEvent event) {
-            if (!(event.getEntity() instanceof SnowGolem golem)) return;
+            if (!(event.getEntity() instanceof SnowGolem)) return;
             DamageSource source = event.getSource();
-            // Water damage has no attacker, so a source-less hit while wet is the environmental one.
+            // Vanilla hurts water-sensitive mobs in rain or water with the drown damage type.
             if ((Config.SNOW_FIRE_RESISTANCE.get() == FireResistance.FULL && source.is(DamageTypeTags.IS_FIRE))
                     || (Config.SNOW_MAGMA_IMMUNITY.get() && source.is(DamageTypes.HOT_FLOOR))
                     || (Config.SNOW_PLANT_IMMUNITY.get()
                             && (source.is(DamageTypes.CACTUS) || source.is(DamageTypes.SWEET_BERRY_BUSH)))
-                    || (Config.SNOW_WATER_IMMUNITY.get() && source.getEntity() == null && golem.isInWaterOrRain())) {
+                    || (Config.SNOW_WATER_IMMUNITY.get() && source.is(DamageTypes.DROWN))) {
                 event.setCanceled(true);
             }
         }
