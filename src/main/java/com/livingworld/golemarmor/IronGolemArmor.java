@@ -191,7 +191,7 @@ public class IronGolemArmor {
             SNOW_WATER_IMMUNITY = b.comment("If true, no damage from rain or water.")
                     .translation(tr("snowGolems.immunities.water"))
                     .define("water", true);
-            SNOW_FIRE_RESISTANCE = b.comment("Same modes as the iron golem fire option.")
+            SNOW_FIRE_RESISTANCE = b.comment("Same modes as the iron golem fire option. FULL also stops snow golems melting in hot biomes.")
                     .translation(tr("snowGolems.immunities.fire"))
                     .defineEnum("fire", FireResistance.NO_AFTERBURN);
             SNOW_POISON_IMMUNITY = b.comment("If true, snow golems can't be poisoned.")
@@ -307,7 +307,12 @@ public class IronGolemArmor {
         @SubscribeEvent
         public static void onJoin(EntityJoinLevelEvent event) {
             if (event.getLevel().isClientSide()) return;
-            if (!(event.getEntity() instanceof IronGolem golem)) return;
+            if (event.getEntity() instanceof IronGolem golem) joinIronGolem(golem);
+            else if (event.getEntity() instanceof SnowGolem golem) updateSnowGolem(golem);
+            else if (event.getEntity() instanceof Snowball ball) rollSnowball(ball);
+        }
+
+        private static void joinIronGolem(IronGolem golem) {
             update(golem);
             // Goals aren't saved, so every golem instance needs one. Always added; it checks the config itself.
             if (golem.targetSelector.getAvailableGoals().stream()
@@ -317,17 +322,9 @@ public class IronGolemArmor {
             }
         }
 
-        @SubscribeEvent
-        public static void onSnowGolemJoin(EntityJoinLevelEvent event) {
-            if (event.getLevel().isClientSide()) return;
-            if (event.getEntity() instanceof SnowGolem golem) updateSnowGolem(golem);
-        }
-
         /** Snowballs thrown by snow golems get a variant here; the item they carry decides what they do on impact. */
-        @SubscribeEvent
-        public static void onSnowballJoin(EntityJoinLevelEvent event) {
-            if (event.getLevel().isClientSide()) return;
-            if (!(event.getEntity() instanceof Snowball ball) || !(ball.getOwner() instanceof SnowGolem)) return;
+        private static void rollSnowball(Snowball ball) {
+            if (!(ball.getOwner() instanceof SnowGolem)) return;
             // Saved projectiles rejoin when their chunk loads with their item intact; don't reroll them.
             if (!ball.getItem().is(Items.SNOWBALL)) return;
 
@@ -352,6 +349,8 @@ public class IronGolemArmor {
                 event.setCanceled(true);
                 return;
             }
+            // The impact event also fires on the client; effects, damage and knockback are server-side only.
+            if (ball.level().isClientSide()) return;
 
             ItemStack stack = ball.getItem();
             if (isVariant(stack, Items.FLINT, ROCK_SNOWBALL_MODEL)) {
@@ -386,31 +385,38 @@ public class IronGolemArmor {
 
         @SubscribeEvent
         public static void onEffectApplicable(MobEffectEvent.Applicable event) {
-            if (event.getEntity() instanceof SnowGolem) {
-                if (Config.SNOW_POISON_IMMUNITY.get() && event.getEffectInstance().is(MobEffects.POISON)) {
-                    event.setResult(MobEffectEvent.Applicable.Result.DO_NOT_APPLY);
-                }
-                return;
-            }
-            if (!(event.getEntity() instanceof IronGolem golem)) return;
-            if (Config.POISON_IMMUNITY.get() && isEligible(golem)
-                    && event.getEffectInstance().is(MobEffects.POISON)) {
-                event.setResult(MobEffectEvent.Applicable.Result.DO_NOT_APPLY);
-            }
+            if (!event.getEffectInstance().is(MobEffects.POISON)) return;
+            boolean immune = event.getEntity() instanceof IronGolem golem
+                    ? Config.POISON_IMMUNITY.get() && isEligible(golem)
+                    : event.getEntity() instanceof SnowGolem && Config.SNOW_POISON_IMMUNITY.get();
+            if (immune) event.setResult(MobEffectEvent.Applicable.Result.DO_NOT_APPLY);
         }
 
         @SubscribeEvent
-        public static void onSnowGolemIncomingDamage(LivingIncomingDamageEvent event) {
-            if (!(event.getEntity() instanceof SnowGolem)) return;
+        public static void onIncomingDamage(LivingIncomingDamageEvent event) {
             DamageSource source = event.getSource();
-            // Vanilla hurts water-sensitive mobs in rain or water with the drown damage type.
-            if ((Config.SNOW_FIRE_RESISTANCE.get() == FireResistance.FULL && source.is(DamageTypeTags.IS_FIRE))
-                    || (Config.SNOW_MAGMA_IMMUNITY.get() && source.is(DamageTypes.HOT_FLOOR))
-                    || (Config.SNOW_PLANT_IMMUNITY.get()
-                            && (source.is(DamageTypes.CACTUS) || source.is(DamageTypes.SWEET_BERRY_BUSH)))
-                    || (Config.SNOW_WATER_IMMUNITY.get() && source.is(DamageTypes.DROWN))) {
-                event.setCanceled(true);
+            boolean immune;
+            if (event.getEntity() instanceof IronGolem golem) {
+                immune = isEligible(golem)
+                        && (isImmune(source, Config.FIRE_RESISTANCE.get(), Config.MAGMA_IMMUNITY.get(), Config.PLANT_IMMUNITY.get())
+                                || (Config.FREEZE_IMMUNITY.get() && source.is(DamageTypes.FREEZE)));
+            } else if (event.getEntity() instanceof SnowGolem) {
+                // Vanilla hurts water-sensitive mobs in rain or water with the drown damage type.
+                immune = isImmune(source, Config.SNOW_FIRE_RESISTANCE.get(), Config.SNOW_MAGMA_IMMUNITY.get(), Config.SNOW_PLANT_IMMUNITY.get())
+                        || (Config.SNOW_WATER_IMMUNITY.get() && source.is(DamageTypes.DROWN));
+            } else {
+                return;
             }
+            if (immune) event.setCanceled(true);
+        }
+
+        /** The hazards both golem types share, checked against one golem type's settings. */
+        private static boolean isImmune(DamageSource source, FireResistance fire, boolean magma, boolean plants) {
+            // IS_FIRE is the same tag the vanilla Fire Resistance effect checks. It includes on-fire damage,
+            // so FULL also stops snow golems melting in hot biomes.
+            return (fire == FireResistance.FULL && source.is(DamageTypeTags.IS_FIRE))
+                    || (magma && source.is(DamageTypes.HOT_FLOOR))
+                    || (plants && (source.is(DamageTypes.CACTUS) || source.is(DamageTypes.SWEET_BERRY_BUSH)));
         }
 
         /** Snow golems' snow trail is their only mob-griefing check, so denying it here only stops the trail. */
@@ -420,33 +426,19 @@ public class IronGolemArmor {
         }
 
         @SubscribeEvent
-        public static void onSnowGolemTick(EntityTickEvent.Post event) {
-            if (!(event.getEntity() instanceof SnowGolem golem)) return;
-            if (golem.level().isClientSide()) return;
+        public static void onTick(EntityTickEvent.Post event) {
+            // Cheap checks first: this runs for every entity every tick.
+            if (event.getEntity().level().isClientSide()) return;
+            if (event.getEntity() instanceof IronGolem golem) tickIronGolem(golem);
+            else if (event.getEntity() instanceof SnowGolem golem) tickSnowGolem(golem);
+        }
+
+        private static void tickSnowGolem(SnowGolem golem) {
             if (golem.getRemainingFireTicks() <= 0 || Config.SNOW_FIRE_RESISTANCE.get() == FireResistance.OFF) return;
             clearAfterburnOutsideFire(golem);
         }
 
-        @SubscribeEvent
-        public static void onIncomingDamage(LivingIncomingDamageEvent event) {
-            if (!(event.getEntity() instanceof IronGolem golem)) return;
-            if (!isEligible(golem)) return;
-            DamageSource source = event.getSource();
-            // IS_FIRE is the same tag the vanilla Fire Resistance effect checks.
-            if ((Config.FIRE_RESISTANCE.get() == FireResistance.FULL && source.is(DamageTypeTags.IS_FIRE))
-                    || (Config.MAGMA_IMMUNITY.get() && source.is(DamageTypes.HOT_FLOOR))
-                    || (Config.PLANT_IMMUNITY.get()
-                            && (source.is(DamageTypes.CACTUS) || source.is(DamageTypes.SWEET_BERRY_BUSH)))
-                    || (Config.FREEZE_IMMUNITY.get() && source.is(DamageTypes.FREEZE))) {
-                event.setCanceled(true);
-            }
-        }
-
-        @SubscribeEvent
-        public static void onTick(EntityTickEvent.Post event) {
-            if (!(event.getEntity() instanceof IronGolem golem)) return;
-            // Cheap checks first: this runs for every entity every tick.
-            if (golem.level().isClientSide()) return;
+        private static void tickIronGolem(IronGolem golem) {
             boolean burning = golem.getRemainingFireTicks() > 0;
             boolean freezing = golem.getTicksFrozen() > 0;
             if (!burning && !freezing) return;
