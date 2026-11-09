@@ -52,7 +52,7 @@
   "golemarmor.configuration.snowGolems.immunities.water": "Rain and Water",
   "golemarmor.configuration.snowGolems.immunities.water.tooltip": "No damage from rain or water.",
   "golemarmor.configuration.snowGolems.immunities.fire": "Fire Resistance",
-  "golemarmor.configuration.snowGolems.immunities.fire.tooltip": "Off: vanilla.\nNo Afterburn: stop burning as soon as they leave fire or lava, but still take damage while in it.\nFull: no damage from fire, lava, burning, magma or fireballs.",
+  "golemarmor.configuration.snowGolems.immunities.fire.tooltip": "Off: vanilla.\nNo Afterburn: stop burning as soon as they leave fire or lava, but still take damage while in it.\nFull: no damage from fire, lava, burning, magma or fireballs, and no melting in hot biomes like deserts and the Nether.",
   "golemarmor.configuration.snowGolems.immunities.poison": "Poison",
   "golemarmor.configuration.snowGolems.immunities.poison.tooltip": "Snow golems can't be poisoned. Turning this on cures golems that already are.",
   "golemarmor.configuration.snowGolems.immunities.magma": "Magma Blocks",
