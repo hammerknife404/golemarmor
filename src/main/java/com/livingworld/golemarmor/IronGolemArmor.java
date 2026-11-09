@@ -346,6 +346,13 @@ public class IronGolemArmor {
             if (!(event.getRayTraceResult() instanceof EntityHitResult hit)) return;
             if (!(hit.getEntity() instanceof LivingEntity target)) return;
 
+            // Snow golems' snowballs pass through other snow golems instead of hitting them.
+            // Covers plain snowballs too, which vanilla lets knock back the golem they hit.
+            if (target instanceof SnowGolem && ball.getOwner() instanceof SnowGolem) {
+                event.setCanceled(true);
+                return;
+            }
+
             ItemStack stack = ball.getItem();
             if (isVariant(stack, Items.FLINT, ROCK_SNOWBALL_MODEL)) {
                 // Vanilla's own hit lands after this one and does 3 to blazes, which i-frames would cap
