@@ -15,7 +15,8 @@ description='''
 Gives vanilla Iron Golems configurable armor, armor toughness and bonus health,
 plus adjustable fire resistance, immunities to poison, magma blocks, plants and freezing,
 and optional creeper hunting that keeps clear of villagers.
-Snow Golems get armor, immunities (including to rain and water) and a chance to throw poisoning or rock-filled snowballs.
+Snow Golems get armor, immunities (including to rain and water), an optional snow trail,
+and a chance to throw yellow (poison and nausea) or rock-filled (damage and knockback) snowballs.
 Existing golems are updated when their chunk loads.
 '''
 

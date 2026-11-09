@@ -7,8 +7,8 @@ A small NeoForge mod for Minecraft 1.21.1 that makes vanilla Iron Golems and Sno
 - **Iron golems:** configurable armor, toughness and bonus health, for every golem or only player-built ones.
 - **Iron golem immunities:** fire resistance, poison, magma blocks, plants and powder snow, each adjustable.
 - **Creeper hunting:** optional, and holds off while villagers are close enough to be caught in the blast.
-- **Snow golems:** armor, their own immunities including rain and water, and a chance to throw poisoning or rock-filled snowballs.
-- **Live config:** works on existing worlds, and config changes apply without a restart.
+- **Snow golems:** armor, their own immunities including rain and water, an optional snow trail, and a chance to throw yellow snowballs (poison and nausea) or rock-filled ones (damage and knockback).
+- **Live config:** works on existing worlds, and config changes apply without a restart. The in-game config screen groups options into menus with mouse-over help.
 - **Server-side:** players can join with or without the mod. With it, they also see the snowball textures.
 
 ## Requirements
