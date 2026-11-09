@@ -24,9 +24,11 @@ import net.minecraft.world.entity.monster.Blaze;
 import net.minecraft.world.entity.monster.Creeper;
 import net.minecraft.world.entity.npc.AbstractVillager;
 import net.minecraft.world.entity.projectile.Snowball;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.component.CustomModelData;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.EntityHitResult;
 import net.neoforged.bus.api.IEventBus;
@@ -42,8 +44,6 @@ import net.neoforged.neoforge.event.entity.ProjectileImpactEvent;
 import net.neoforged.neoforge.event.entity.living.LivingIncomingDamageEvent;
 import net.neoforged.neoforge.event.entity.living.MobEffectEvent;
 import net.neoforged.neoforge.event.tick.EntityTickEvent;
-import net.neoforged.neoforge.registries.DeferredItem;
-import net.neoforged.neoforge.registries.DeferredRegister;
 import net.neoforged.neoforge.server.ServerLifecycleHooks;
 
 /**
@@ -65,14 +65,8 @@ import net.neoforged.neoforge.server.ServerLifecycleHooks;
 public class IronGolemArmor {
     public static final String MOD_ID = "golemarmor";
 
-    public static final DeferredRegister.Items ITEMS = DeferredRegister.createItems(MOD_ID);
-    /** Snowballs thrown by snow golems. Rendered with their own item model, so they look yellow or rocky in flight. */
-    public static final DeferredItem<Item> YELLOW_SNOWBALL = ITEMS.registerSimpleItem("yellow_snowball");
-    public static final DeferredItem<Item> ROCK_SNOWBALL = ITEMS.registerSimpleItem("rock_snowball");
-
     public IronGolemArmor(IEventBus modBus, ModContainer container) {
         container.registerConfig(ModConfig.Type.COMMON, Config.SPEC);
-        ITEMS.register(modBus);
         modBus.addListener(Events::onConfigReload);
     }
 
@@ -169,6 +163,15 @@ public class IronGolemArmor {
                 ResourceLocation.fromNamespaceAndPath(MOD_ID, "snow_golem_toughness");
         /** Poison from a yellow snowball. */
         private static final int YELLOW_POISON_TICKS = 5 * 20;
+        /**
+         * Snowball variants ride on vanilla items so the mod stays optional on clients:
+         * no new registry entries means vanilla and mod-less clients can still join.
+         * Those clients see plain flint or yellow dye in flight. Clients with the mod see the
+         * snowball textures via custom_model_data overrides on the vanilla item models.
+         * Values must match assets/minecraft/models/item/{flint,yellow_dye}.json.
+         */
+        private static final int YELLOW_SNOWBALL_MODEL = 4041701;
+        private static final int ROCK_SNOWBALL_MODEL = 4041702;
 
         @SubscribeEvent
         public static void onJoin(EntityJoinLevelEvent event) {
@@ -200,9 +203,9 @@ public class IronGolemArmor {
             float roll = ball.getRandom().nextFloat();
             double yellowChance = Config.YELLOW_SNOWBALL_CHANCE.get();
             if (roll < yellowChance) {
-                ball.setItem(new ItemStack(YELLOW_SNOWBALL.get()));
+                ball.setItem(variant(Items.YELLOW_DYE, YELLOW_SNOWBALL_MODEL));
             } else if (roll < yellowChance + Config.ROCK_SNOWBALL_CHANCE.get()) {
-                ball.setItem(new ItemStack(ROCK_SNOWBALL.get()));
+                ball.setItem(variant(Items.FLINT, ROCK_SNOWBALL_MODEL));
             }
         }
 
@@ -213,14 +216,25 @@ public class IronGolemArmor {
             if (!(hit.getEntity() instanceof LivingEntity target)) return;
 
             ItemStack stack = ball.getItem();
-            if (stack.is(ROCK_SNOWBALL.get())) {
+            if (isVariant(stack, Items.FLINT, ROCK_SNOWBALL_MODEL)) {
                 // Vanilla's own hit lands after this one and does 3 to blazes, which i-frames would cap
                 // at this hit's damage. Deal vanilla's 3 plus the rock's 1 up front instead.
                 float damage = target instanceof Blaze ? 4.0F : 1.0F;
                 target.hurt(ball.damageSources().thrown(ball, ball.getOwner()), damage);
-            } else if (stack.is(YELLOW_SNOWBALL.get())) {
+            } else if (isVariant(stack, Items.YELLOW_DYE, YELLOW_SNOWBALL_MODEL)) {
                 target.addEffect(new MobEffectInstance(MobEffects.POISON, YELLOW_POISON_TICKS));
             }
+        }
+
+        private static ItemStack variant(Item item, int model) {
+            ItemStack stack = new ItemStack(item);
+            stack.set(DataComponents.CUSTOM_MODEL_DATA, new CustomModelData(model));
+            return stack;
+        }
+
+        private static boolean isVariant(ItemStack stack, Item item, int model) {
+            CustomModelData data = stack.get(DataComponents.CUSTOM_MODEL_DATA);
+            return stack.is(item) && data != null && data.value() == model;
         }
 
         @SubscribeEvent

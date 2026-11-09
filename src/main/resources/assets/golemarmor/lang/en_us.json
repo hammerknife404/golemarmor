@@ -19,7 +19,5 @@
   "golemarmor.configuration.snowPlantImmunity": "Snow Golem Plant Immunity",
   "golemarmor.configuration.snowPoisonImmunity": "Snow Golem Poison Immunity",
   "golemarmor.configuration.yellowSnowballChance": "Yellow Snowball Chance",
-  "golemarmor.configuration.rockSnowballChance": "Rock Snowball Chance",
-  "item.golemarmor.yellow_snowball": "Yellow Snowball",
-  "item.golemarmor.rock_snowball": "Rock Snowball"
+  "golemarmor.configuration.rockSnowballChance": "Rock Snowball Chance"
 }
