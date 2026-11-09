@@ -1,5 +1,13 @@
 package com.livingworld.golemarmor;
 
+import com.electronwill.nightconfig.core.file.CommentedFileConfig;
+import com.electronwill.nightconfig.toml.TomlFormat;
+import com.mojang.logging.LogUtils;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Locale;
+import java.util.Map;
+import net.minecraft.network.chat.Component;
 import net.minecraft.core.Holder;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
@@ -31,6 +39,7 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.CustomModelData;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.EntityHitResult;
+import net.minecraft.world.phys.Vec3;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.ModContainer;
@@ -38,19 +47,23 @@ import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.config.ModConfig;
 import net.neoforged.fml.event.config.ModConfigEvent;
+import net.neoforged.fml.loading.FMLPaths;
 import net.neoforged.neoforge.common.ModConfigSpec;
+import net.neoforged.neoforge.common.TranslatableEnum;
 import net.neoforged.neoforge.event.entity.EntityJoinLevelEvent;
+import net.neoforged.neoforge.event.entity.EntityMobGriefingEvent;
 import net.neoforged.neoforge.event.entity.ProjectileImpactEvent;
 import net.neoforged.neoforge.event.entity.living.LivingIncomingDamageEvent;
 import net.neoforged.neoforge.event.entity.living.MobEffectEvent;
 import net.neoforged.neoforge.event.tick.EntityTickEvent;
 import net.neoforged.neoforge.server.ServerLifecycleHooks;
+import org.slf4j.Logger;
 
 /**
  * Gives vanilla Iron Golems armor, armor toughness and optional bonus health,
  * plus optional resistance to fire and immunities to poison, magma blocks, plants and freezing,
- * and can make them attack creepers. Snow Golems get their own armor, immunities and
- * a chance to throw poisoning or rock-filled snowballs.
+ * and can make them attack creepers. Snow Golems get their own armor, immunities, a snow trail
+ * toggle and a chance to throw yellow (poison and nausea) or rock-filled (damage and knockback) snowballs.
  *
  * Uses permanent attribute modifiers applied on EntityJoinLevelEvent instead of
  * EntityAttributeModificationEvent, because attribute base values are saved in each
@@ -64,12 +77,20 @@ import net.neoforged.neoforge.server.ServerLifecycleHooks;
 @Mod(IronGolemArmor.MOD_ID)
 public class IronGolemArmor {
     public static final String MOD_ID = "golemarmor";
+    private static final Logger LOGGER = LogUtils.getLogger();
 
     public IronGolemArmor(IEventBus modBus, ModContainer container) {
+        // Must run before the config file is loaded, so the loader sees the sectioned layout.
+        Config.migrateFlatLayout();
         container.registerConfig(ModConfig.Type.COMMON, Config.SPEC);
         modBus.addListener(Events::onConfigReload);
     }
 
+    /**
+     * Options are grouped into sections so the in-game config screen shows them as sub-menus.
+     * Every entry and section has an explicit translation key, so its label and mouse-over
+     * text come from the lang file (key and key + ".tooltip"); the comments only document the TOML file.
+     */
     public static final class Config {
         public static final ModConfigSpec SPEC;
         public static final ModConfigSpec.DoubleValue ARMOR;
@@ -83,6 +104,7 @@ public class IronGolemArmor {
         public static final ModConfigSpec.BooleanValue FREEZE_IMMUNITY;
         public static final ModConfigSpec.BooleanValue ATTACK_CREEPERS;
         public static final ModConfigSpec.DoubleValue CREEPER_VILLAGER_RADIUS;
+        public static final ModConfigSpec.BooleanValue SNOW_TRAILS;
         public static final ModConfigSpec.DoubleValue SNOW_ARMOR;
         public static final ModConfigSpec.DoubleValue SNOW_TOUGHNESS;
         public static final ModConfigSpec.BooleanValue SNOW_WATER_IMMUNITY;
@@ -93,61 +115,168 @@ public class IronGolemArmor {
         public static final ModConfigSpec.DoubleValue YELLOW_SNOWBALL_CHANCE;
         public static final ModConfigSpec.DoubleValue ROCK_SNOWBALL_CHANCE;
 
+        private static String tr(String path) {
+            return MOD_ID + ".configuration." + path;
+        }
+
         static {
             ModConfigSpec.Builder b = new ModConfigSpec.Builder();
-            ARMOR = b.comment("Armor points added to iron golems. 15 = full vanilla iron set.")
+
+            b.comment("Iron golem settings.").translation(tr("ironGolems")).push("ironGolems");
+            PLAYER_CREATED_ONLY = b.comment("If true, only player-built golems are buffed; village golems stay vanilla.")
+                    .translation(tr("ironGolems.playerCreatedOnly"))
+                    .define("playerCreatedOnly", false);
+
+            b.comment("Armor, toughness and health.").translation(tr("ironGolems.stats")).push("stats");
+            ARMOR = b.comment("Armor points added. 15 = full vanilla iron set.")
+                    .translation(tr("ironGolems.stats.armor"))
                     .defineInRange("armor", 15.0, 0.0, 30.0);
             TOUGHNESS = b.comment("Armor toughness added. 8 = full diamond set, 12 = full netherite set.")
+                    .translation(tr("ironGolems.stats.toughness"))
                     .defineInRange("toughness", 8.0, 0.0, 20.0);
-            BONUS_HEALTH = b.comment("Extra max health added to the vanilla 100. 0 = unchanged. Max 924 (vanilla caps max health at 1024).")
+            BONUS_HEALTH = b.comment("Extra max health added to the vanilla 100. Max 924 (vanilla caps max health at 1024).")
+                    .translation(tr("ironGolems.stats.bonusHealth"))
                     .defineInRange("bonusHealth", 0.0, 0.0, 924.0);
-            PLAYER_CREATED_ONLY = b.comment("If true, only player-built golems are buffed; village golems stay vanilla.")
-                    .define("playerCreatedOnly", false);
-            POISON_IMMUNITY = b.comment("If true, golems can't be poisoned.")
-                    .define("poisonImmunity", true);
-            FIRE_RESISTANCE = b.comment("How well golems resist fire.",
-                            "OFF: vanilla.",
-                            "NO_AFTERBURN: golems stop burning as soon as they leave fire or lava, but still take damage while in it.",
+            b.pop();
+
+            b.comment("Environmental immunities.").translation(tr("ironGolems.immunities")).push("immunities");
+            FIRE_RESISTANCE = b.comment("OFF: vanilla.",
+                            "NO_AFTERBURN: stop burning as soon as they leave fire or lava, but still take damage while in it.",
                             "FULL: like the Fire Resistance potion, no damage from fire, lava, burning, magma or fireballs.",
                             "FULL stops lava-based iron farms from killing golems.")
-                    .defineEnum("fireResistance", FireResistance.NO_AFTERBURN);
-            MAGMA_IMMUNITY = b.comment("If true, golems take no damage from standing on magma blocks.")
-                    .define("magmaImmunity", true);
-            PLANT_IMMUNITY = b.comment("If true, golems take no damage from cactus or sweet berry bushes.")
-                    .define("plantImmunity", true);
+                    .translation(tr("ironGolems.immunities.fire"))
+                    .defineEnum("fire", FireResistance.NO_AFTERBURN);
+            POISON_IMMUNITY = b.comment("If true, golems can't be poisoned.")
+                    .translation(tr("ironGolems.immunities.poison"))
+                    .define("poison", true);
+            MAGMA_IMMUNITY = b.comment("If true, no damage from standing on magma blocks.")
+                    .translation(tr("ironGolems.immunities.magma"))
+                    .define("magma", true);
+            PLANT_IMMUNITY = b.comment("If true, no damage from cactus or sweet berry bushes.")
+                    .translation(tr("ironGolems.immunities.plants"))
+                    .define("plants", true);
             FREEZE_IMMUNITY = b.comment("If true, golems don't freeze in powder snow.")
-                    .define("freezeImmunity", true);
+                    .translation(tr("ironGolems.immunities.freezing"))
+                    .define("freezing", true);
+            b.pop();
+
+            b.comment("Creeper hunting.").translation(tr("ironGolems.creepers")).push("creepers");
             ATTACK_CREEPERS = b.comment("If true, golems attack creepers. Vanilla golems ignore them.")
-                    .define("attackCreepers", false);
-            CREEPER_VILLAGER_RADIUS = b.comment("Golems leave a creeper alone while a villager or wandering trader is within this many blocks of it,",
+                    .translation(tr("ironGolems.creepers.attack"))
+                    .define("attack", false);
+            CREEPER_VILLAGER_RADIUS = b.comment("Leave a creeper alone while a villager or wandering trader is within this many blocks of it,",
                             "and back off if one walks into range mid-fight. Doubled for charged creepers. 0 = always attack.",
                             "A creeper explosion hurts out to 6 blocks, 12 when charged.")
-                    .defineInRange("creeperVillagerRadius", 8.0, 0.0, 32.0);
-            SNOW_ARMOR = b.comment("Armor points added to snow golems. 0 = vanilla.")
-                    .defineInRange("snowArmor", 1.0, 0.0, 30.0);
-            SNOW_TOUGHNESS = b.comment("Armor toughness added to snow golems.")
-                    .defineInRange("snowToughness", 0.0, 0.0, 20.0);
-            SNOW_WATER_IMMUNITY = b.comment("If true, snow golems take no damage from rain or water.")
-                    .define("snowWaterImmunity", true);
-            SNOW_FIRE_RESISTANCE = b.comment("How well snow golems resist fire. Same modes as fireResistance.")
-                    .defineEnum("snowFireResistance", FireResistance.NO_AFTERBURN);
-            SNOW_MAGMA_IMMUNITY = b.comment("If true, snow golems take no damage from standing on magma blocks.")
-                    .define("snowMagmaImmunity", true);
-            SNOW_PLANT_IMMUNITY = b.comment("If true, snow golems take no damage from cactus or sweet berry bushes.")
-                    .define("snowPlantImmunity", true);
+                    .translation(tr("ironGolems.creepers.villagerSafetyRadius"))
+                    .defineInRange("villagerSafetyRadius", 8.0, 0.0, 32.0);
+            b.pop();
+            b.pop();
+
+            b.comment("Snow golem settings.").translation(tr("snowGolems")).push("snowGolems");
+            SNOW_TRAILS = b.comment("If true, snow golems leave snow layers as they walk (vanilla; also needs the mobGriefing gamerule).",
+                            "If false, they never leave trails.")
+                    .translation(tr("snowGolems.snowTrails"))
+                    .define("snowTrails", true);
+
+            b.comment("Armor and toughness.").translation(tr("snowGolems.stats")).push("stats");
+            SNOW_ARMOR = b.comment("Armor points added. 0 = vanilla.")
+                    .translation(tr("snowGolems.stats.armor"))
+                    .defineInRange("armor", 1.0, 0.0, 30.0);
+            SNOW_TOUGHNESS = b.comment("Armor toughness added.")
+                    .translation(tr("snowGolems.stats.toughness"))
+                    .defineInRange("toughness", 0.0, 0.0, 20.0);
+            b.pop();
+
+            b.comment("Environmental immunities.").translation(tr("snowGolems.immunities")).push("immunities");
+            SNOW_WATER_IMMUNITY = b.comment("If true, no damage from rain or water.")
+                    .translation(tr("snowGolems.immunities.water"))
+                    .define("water", true);
+            SNOW_FIRE_RESISTANCE = b.comment("Same modes as the iron golem fire option.")
+                    .translation(tr("snowGolems.immunities.fire"))
+                    .defineEnum("fire", FireResistance.NO_AFTERBURN);
             SNOW_POISON_IMMUNITY = b.comment("If true, snow golems can't be poisoned.")
-                    .define("snowPoisonImmunity", true);
-            YELLOW_SNOWBALL_CHANCE = b.comment("Chance per throw that a snow golem throws a yellow snowball,",
-                            "which poisons the target for 5 seconds. 0 = never.")
-                    .defineInRange("yellowSnowballChance", 0.1, 0.0, 1.0);
-            ROCK_SNOWBALL_CHANCE = b.comment("Chance per throw that a snow golem throws a rock-filled snowball, which deals 1 damage. 0 = never.",
+                    .translation(tr("snowGolems.immunities.poison"))
+                    .define("poison", true);
+            SNOW_MAGMA_IMMUNITY = b.comment("If true, no damage from standing on magma blocks.")
+                    .translation(tr("snowGolems.immunities.magma"))
+                    .define("magma", true);
+            SNOW_PLANT_IMMUNITY = b.comment("If true, no damage from cactus or sweet berry bushes.")
+                    .translation(tr("snowGolems.immunities.plants"))
+                    .define("plants", true);
+            b.pop();
+
+            b.comment("Special snowballs.").translation(tr("snowGolems.snowballs")).push("snowballs");
+            YELLOW_SNOWBALL_CHANCE = b.comment("Chance per throw of a yellow snowball: poison and nausea for 5 seconds. 0 = never.")
+                    .translation(tr("snowGolems.snowballs.yellowChance"))
+                    .defineInRange("yellowChance", 0.1, 0.0, 1.0);
+            ROCK_SNOWBALL_CHANCE = b.comment("Chance per throw of a rock-filled snowball: 1 damage and extra knockback. 0 = never.",
                             "Yellow is rolled first, so if the two chances add up to more than 1, rock only gets the leftover share.")
-                    .defineInRange("rockSnowballChance", 0.1, 0.0, 1.0);
+                    .translation(tr("snowGolems.snowballs.rockChance"))
+                    .defineInRange("rockChance", 0.1, 0.0, 1.0);
+            b.pop();
+            b.pop();
+
             SPEC = b.build();
+        }
+
+        /** Flat keys used up to 1.7.0, and where each now lives. */
+        private static final Map<String, String> FLAT_KEYS = Map.ofEntries(
+                Map.entry("armor", "ironGolems.stats.armor"),
+                Map.entry("toughness", "ironGolems.stats.toughness"),
+                Map.entry("bonusHealth", "ironGolems.stats.bonusHealth"),
+                Map.entry("playerCreatedOnly", "ironGolems.playerCreatedOnly"),
+                Map.entry("poisonImmunity", "ironGolems.immunities.poison"),
+                Map.entry("fireResistance", "ironGolems.immunities.fire"),
+                Map.entry("magmaImmunity", "ironGolems.immunities.magma"),
+                Map.entry("plantImmunity", "ironGolems.immunities.plants"),
+                Map.entry("freezeImmunity", "ironGolems.immunities.freezing"),
+                Map.entry("attackCreepers", "ironGolems.creepers.attack"),
+                Map.entry("creeperVillagerRadius", "ironGolems.creepers.villagerSafetyRadius"),
+                Map.entry("snowArmor", "snowGolems.stats.armor"),
+                Map.entry("snowToughness", "snowGolems.stats.toughness"),
+                Map.entry("snowWaterImmunity", "snowGolems.immunities.water"),
+                Map.entry("snowFireResistance", "snowGolems.immunities.fire"),
+                Map.entry("snowMagmaImmunity", "snowGolems.immunities.magma"),
+                Map.entry("snowPlantImmunity", "snowGolems.immunities.plants"),
+                Map.entry("snowPoisonImmunity", "snowGolems.immunities.poison"),
+                Map.entry("yellowSnowballChance", "snowGolems.snowballs.yellowChance"),
+                Map.entry("rockSnowballChance", "snowGolems.snowballs.rockChance"));
+
+        /**
+         * Moves values from the flat layout (1.7.0 and older) into the sections, so upgrading keeps
+         * custom settings. Without this the loader would drop the old keys and reset everything to
+         * defaults. Best effort: on any error the file is left alone and the loader resets it as usual.
+         */
+        static void migrateFlatLayout() {
+            Path file = FMLPaths.CONFIGDIR.get().resolve(MOD_ID + "-common.toml");
+            if (!Files.isRegularFile(file)) return;
+            try (CommentedFileConfig config = CommentedFileConfig.builder(file, TomlFormat.instance()).build()) {
+                config.load();
+                boolean changed = false;
+                for (Map.Entry<String, String> key : FLAT_KEYS.entrySet()) {
+                    if (!config.contains(key.getKey())) continue;
+                    Object value = config.remove(key.getKey());
+                    if (!config.contains(key.getValue())) config.set(key.getValue(), value);
+                    changed = true;
+                }
+                if (changed) {
+                    config.save();
+                    LOGGER.info("Moved {} settings into the sectioned config layout", MOD_ID);
+                }
+            } catch (Exception e) {
+                LOGGER.warn("Couldn't migrate {}; old settings will reset to defaults", file, e);
+            }
         }
     }
 
-    public enum FireResistance { OFF, NO_AFTERBURN, FULL }
+    public enum FireResistance implements TranslatableEnum {
+        OFF, NO_AFTERBURN, FULL;
+
+        @Override
+        public Component getTranslatedName() {
+            return Component.translatable(MOD_ID + ".configuration.fireResistance." + name().toLowerCase(Locale.ROOT));
+        }
+    }
 
     @EventBusSubscriber(modid = MOD_ID)
     public static final class Events {
@@ -161,8 +290,10 @@ public class IronGolemArmor {
                 ResourceLocation.fromNamespaceAndPath(MOD_ID, "snow_golem_armor");
         private static final ResourceLocation SNOW_TOUGHNESS_ID =
                 ResourceLocation.fromNamespaceAndPath(MOD_ID, "snow_golem_toughness");
-        /** Poison from a yellow snowball. */
-        private static final int YELLOW_POISON_TICKS = 5 * 20;
+        /** Poison and nausea from a yellow snowball. */
+        private static final int YELLOW_EFFECT_TICKS = 5 * 20;
+        /** Extra knockback from a rock snowball, the same push as a Punch I arrow. */
+        private static final double ROCK_KNOCKBACK = 0.6;
         /**
          * Snowball variants ride on vanilla items so the mod stays optional on clients:
          * no new registry entries means vanilla and mod-less clients can still join.
@@ -220,9 +351,18 @@ public class IronGolemArmor {
                 // Vanilla's own hit lands after this one and does 3 to blazes, which i-frames would cap
                 // at this hit's damage. Deal vanilla's 3 plus the rock's 1 up front instead.
                 float damage = target instanceof Blaze ? 4.0F : 1.0F;
-                target.hurt(ball.damageSources().thrown(ball, ball.getOwner()), damage);
+                if (target.hurt(ball.damageSources().thrown(ball, ball.getOwner()), damage)) {
+                    // Pushed along the snowball's flight, scaled down by knockback resistance like arrows.
+                    double resistance = Math.max(0.0, 1.0 - target.getAttributeValue(Attributes.KNOCKBACK_RESISTANCE));
+                    Vec3 push = ball.getDeltaMovement().multiply(1.0, 0.0, 1.0).normalize().scale(ROCK_KNOCKBACK * resistance);
+                    if (push.lengthSqr() > 0.0) {
+                        target.push(push.x, 0.1, push.z);
+                        target.hurtMarked = true; // sync the new velocity to players
+                    }
+                }
             } else if (isVariant(stack, Items.YELLOW_DYE, YELLOW_SNOWBALL_MODEL)) {
-                target.addEffect(new MobEffectInstance(MobEffects.POISON, YELLOW_POISON_TICKS));
+                target.addEffect(new MobEffectInstance(MobEffects.POISON, YELLOW_EFFECT_TICKS));
+                target.addEffect(new MobEffectInstance(MobEffects.CONFUSION, YELLOW_EFFECT_TICKS));
             }
         }
 
@@ -264,6 +404,12 @@ public class IronGolemArmor {
                     || (Config.SNOW_WATER_IMMUNITY.get() && source.is(DamageTypes.DROWN))) {
                 event.setCanceled(true);
             }
+        }
+
+        /** Snow golems' snow trail is their only mob-griefing check, so denying it here only stops the trail. */
+        @SubscribeEvent
+        public static void onMobGriefing(EntityMobGriefingEvent event) {
+            if (event.getEntity() instanceof SnowGolem && !Config.SNOW_TRAILS.get()) event.setCanGrief(false);
         }
 
         @SubscribeEvent
